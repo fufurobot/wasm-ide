@@ -51,6 +51,19 @@ jobs:
       - name: Build static bundle
         run: bun run build
 
+      - name: Assert the isolation worker shipped
+        run: |
+          set -eu
+          test -f dist/coi-serviceworker.js || {
+            echo "::error::dist/coi-serviceworker.js is missing; the deployed site cannot become cross-origin isolated"
+            exit 1
+          }
+          grep -q "coi-serviceworker" dist/index.html || {
+            echo "::error::the isolation bootstrap is not inlined in dist/index.html"
+            exit 1
+          }
+          echo "isolation worker and bootstrap present"
+
       - name: Assert no credentials leaked into the bundle
         run: |
           set -eu

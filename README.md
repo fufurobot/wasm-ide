@@ -65,16 +65,43 @@ End-to-end tests run against the **built** bundle via `bun run preview`, not the
 so they exercise the same static-hosting shape GitHub Pages uses — including the assertion
 that no `/api/` request is ever made.
 
+## Cross-origin isolation (important for hosting)
+
+The Runno runtimes are compiled with threads: `@runno/wasi` allocates a `SharedArrayBuffer`
+for program stdin, and browsers only expose that constructor to **cross-origin-isolated**
+documents. Without isolation, every Run fails with `SharedArrayBuffer is not defined` — the
+page loads, the editor works, and nothing executes.
+
+A header-capable host satisfies this with two headers, which `bun run preview` sends:
+
+```
+Cross-Origin-Opener-Policy:   same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+**GitHub Pages cannot send custom headers**, so the build also ships
+`public/coi-serviceworker.js`. It intercepts same-origin responses, injects the headers, and
+the inline bootstrap in `src/index.html` reloads the page once. After that the document is
+isolated with no server cooperation. This is covered by `tests/e2e/isolation.spec.ts`, which
+strips the headers in-flight so the service worker is proven to be doing the work.
+
+If you host this yourself, either send the two headers (preferred — faster, no reload) or
+rely on the bundled worker. If neither is possible, the bootstrap warns once and gives up
+rather than reloading in a loop.
+
 ## How the code is organised
 
 ```
 src/lib/ide.ts          pure core: language catalog, permalink codec, run requests
-src/hooks/useRunner.ts  drives the Runno headless API and streams output
+src/lib/coi.ts          cross-origin isolation policy (pure, unit tested)
+src/hooks/useRunner.ts  drives the Runno headless API and collects output
 src/components/IDE.tsx  the workspace shell
 src/components/Terminal.tsx
 src/components/LanguagePicker.tsx
+public/coi-serviceworker.js  injects COOP/COEP where the host cannot
 src/preview.ts          static file server for dist/ (mirrors Pages, no /api, no rewrites)
-build.ts                bun bundler -> dist/
+build.ts                bun bundler -> dist/ (+ copies public/)
+sync-html.ts            generates the inline bootstrap; build runs it with --check
 tests/unit/             Bun unit tests
 tests/e2e/              Playwright specs
 tools/gh.py             GitHub API helper (see below)

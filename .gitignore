@@ -131,3 +131,7 @@ dist
 
 # local bun/agent scratch space
 .tmp/
+
+# release packaging output
+wasm-ide-*-dist.tar.gz
+wasm-ide-*-dist.tar.gz.sha256
