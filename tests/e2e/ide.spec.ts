@@ -71,9 +71,13 @@ test.describe("wasm-ide", () => {
     await waitForEditor(page);
     await page.locator(RUN_BUTTON).click();
 
-    // Real wasm execution: fib(10) == 55 must appear in the output.
-    await expect(page.locator(TERMINAL)).toContainText("fib(9) = 34", { timeout: 180_000 });
-    await expect(page.locator(TERMINAL)).toContainText("fib(10) = 55");
+    // Real wasm execution. The default sample is `for i in range(10)`, so it
+    // prints fib(0)..fib(9). The *value* fib(10)=55 is never printed, and an
+    // earlier version of this test wrongly asserted that it was — the app was
+    // correct and the assertion was not. Checking the true first and last lines
+    // is what actually catches a truncated tail.
+    await expect(page.locator(TERMINAL)).toContainText("fib(0) = 0", { timeout: 180_000 });
+    await expect(page.locator(TERMINAL)).toContainText("fib(9) = 34");
   });
 
   test("runs edited C code through clang", async ({ page }) => {
