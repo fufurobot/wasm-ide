@@ -1,0 +1,81 @@
+# Fast feedback for the `dev` integration branch.
+#
+# The branch model is: fast test on dev, full test on main, publish artifacts
+# when a release is pushed. So this workflow deliberately stays cheap — it runs
+# the unit suite and a production build, but not the browser suite. Red on dev
+# is acceptable and expected; main is where correctness is enforced.
+name: CI (dev fast)
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+# A newer push supersedes an in-flight run on the same ref.
+concurrency:
+  group: ci-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fast:
+    name: Lint, typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Unit tests
+        run: bun run test:unit
+
+      - name: Build static bundle
+        run: bun run build
+
+      - name: Assert the isolation worker shipped
+        run: |
+          set -eu
+          test -f dist/coi-serviceworker.js || {
+            echo "::error::dist/coi-serviceworker.js is missing; the deployed site cannot become cross-origin isolated"
+            exit 1
+          }
+          grep -q "coi-serviceworker" dist/index.html || {
+            echo "::error::the isolation bootstrap is not inlined in dist/index.html"
+            exit 1
+          }
+          echo "isolation worker and bootstrap present"
+
+      - name: Assert no credentials leaked into the bundle
+        run: |
+          set -eu
+          if grep -rIl -E 'github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{30,}' dist/; then
+            echo "::error::a credential-shaped string was found in dist/"
+            exit 1
+          fi
+          echo "dist/ is free of credential-shaped strings"
+
+      - name: Upload build for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-dev-${{ github.sha }}
+          path: dist/
+          retention-days: 3
