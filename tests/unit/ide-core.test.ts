@@ -8,7 +8,6 @@
 
 import { describe, expect, test } from "bun:test";
 import {
-  EditorLanguage,
   LANGUAGES,
   RUNNO_HEADLESS_LANGUAGES,
   defaultSource,
@@ -19,8 +18,16 @@ import {
   languageIdForMonaco,
   mergeOutput,
   formatResult,
+  type EditorLanguage,
   type ShareState,
 } from "@/lib/ide";
+
+/** Assert a decoded permalink is present, narrowing away the null branch. */
+function expectDecoded(fragment: string): ShareState {
+  const decoded = decodeShareState(fragment);
+  if (decoded === null) throw new Error(`expected ${fragment} to decode`);
+  return decoded;
+}
 
 describe("language catalog", () => {
   test("covers exactly the runtimes Runno actually ships", () => {
@@ -95,7 +102,7 @@ describe("permalink encoding", () => {
       source: 'print("hi")\n',
       stdin: "42\n",
     };
-    const decoded = decodeShareState(encodeShareState(state));
+    const decoded = expectDecoded(encodeShareState(state));
     expect(decoded.language).toBe("python");
     expect(decoded.source).toBe('print("hi")\n');
     expect(decoded.stdin).toBe("42\n");
@@ -107,7 +114,7 @@ describe("permalink encoding", () => {
       source: 'const s = "#&=?/ 日本語 🎉";\nconsole.log(s);\n',
       stdin: "",
     };
-    const decoded = decodeShareState(encodeShareState(state));
+    const decoded = expectDecoded(encodeShareState(state));
     expect(decoded.source).toBe(state.source);
   });
 

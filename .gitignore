@@ -128,3 +128,6 @@ dist
 
 # TernJS port file
 .tern-port
+
+# local bun/agent scratch space
+.tmp/
