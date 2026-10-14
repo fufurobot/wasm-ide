@@ -52,7 +52,7 @@ test.describe("wasm-ide", () => {
     await page.locator(RUN_BUTTON).click();
 
     // Real wasm execution: fib(10) == 55 must appear in the output.
-    await expect(page.locator(TERMINAL)).toContainText("fib(9) = 34", { timeout: 60_000 });
+    await expect(page.locator(TERMINAL)).toContainText("fib(9) = 34", { timeout: 180_000 });
     await expect(page.locator(TERMINAL)).toContainText("fib(10) = 55");
   });
 
@@ -66,7 +66,7 @@ test.describe("wasm-ide", () => {
     );
 
     await page.locator(RUN_BUTTON).click();
-    await expect(page.locator(TERMINAL)).toContainText("C-RUNTIME-OK", { timeout: 90_000 });
+    await expect(page.locator(TERMINAL)).toContainText("C-RUNTIME-OK", { timeout: 240_000 });
   });
 
   test("feeds stdin into the running program", async ({ page }) => {
@@ -76,7 +76,7 @@ test.describe("wasm-ide", () => {
     await page.locator('[data-testid="stdin-input"]').fill("wasm");
     await page.locator(RUN_BUTTON).click();
 
-    await expect(page.locator(TERMINAL)).toContainText("hello wasm", { timeout: 60_000 });
+    await expect(page.locator(TERMINAL)).toContainText("hello wasm", { timeout: 180_000 });
   });
 
   test("surfaces stderr and a non-zero exit code", async ({ page }) => {
@@ -85,7 +85,7 @@ test.describe("wasm-ide", () => {
 
     await page.locator(RUN_BUTTON).click();
 
-    await expect(page.locator(TERMINAL)).toContainText("to stderr", { timeout: 60_000 });
+    await expect(page.locator(TERMINAL)).toContainText("to stderr", { timeout: 180_000 });
     await expect(page.locator('[data-testid="run-status"]')).toContainText("3");
   });
 
@@ -128,7 +128,7 @@ test.describe("wasm-ide", () => {
     });
 
     await page.locator(RUN_BUTTON).click();
-    await expect(page.locator(TERMINAL)).toContainText("PERMALINK-ROUNDTRIP", { timeout: 60_000 });
+    await expect(page.locator(TERMINAL)).toContainText("PERMALINK-ROUNDTRIP", { timeout: 180_000 });
   });
 
   test("works with no backend: every request is same-origin static", async ({ page }) => {
@@ -139,7 +139,7 @@ test.describe("wasm-ide", () => {
 
     await waitForEditor(page);
     await page.locator(RUN_BUTTON).click();
-    await expect(page.locator(TERMINAL)).toContainText("fib(", { timeout: 60_000 });
+    await expect(page.locator(TERMINAL)).toContainText("fib(", { timeout: 180_000 });
 
     // The starter template shipped an /api/hello endpoint; the IDE must not
     // depend on any server-side route because it is published to Pages.

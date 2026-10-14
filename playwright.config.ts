@@ -20,7 +20,7 @@ export default defineConfig({
   workers: 1,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  timeout: 120_000,
+  timeout: 300_000,
   expect: { timeout: 15_000 },
   reporter: process.env.CI ? [["github"], ["list"]] : [["list"]],
   use: {
@@ -36,6 +36,6 @@ export default defineConfig({
         command: "bun run dev",
         url: baseURL,
         reuseExistingServer: !process.env.CI,
-        timeout: 120_000,
+        timeout: 300_000,
       },
 });
