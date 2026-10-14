@@ -263,19 +263,26 @@ def cmd_pr_ready(args: argparse.Namespace) -> int:
     # `ready_for_review` on the GraphQL API is the only way to flip draft state.
     pr = api("GET", f"/repos/{args.repo}/pulls/{args.number}")
     if not pr["draft"]:
-        print("already ready for review")
+        print(f"#{args.number} already ready for review")
         return 0
-    owner, name = args.repo.split("/", 1)
+
     query = """
-    mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) {
-      pullRequest { number isDraft } } }
+    mutation($id: ID!) {
+      markPullRequestReadyForReview(input: {pullRequestId: $id}) {
+        pullRequest { number isDraft }
+      }
+    }
     """
-    result = api(
-        "POST",
-        "/graphql",
-        {"query": query, "variables": {"id": pr["node_id"]}},
-    )
-    _print(result)
+    result = api("POST", "/graphql", {"query": query, "variables": {"id": pr["node_id"]}})
+
+    if result.get("errors"):
+        print(f"error: {result['errors']}", file=sys.stderr)
+        return 1
+
+    # GraphQL wraps the payload in data.markPullRequestReadyForReview.
+    payload = (result.get("data") or {}).get("markPullRequestReadyForReview") or {}
+    updated = payload.get("pullRequest") or {}
+    print(f"#{updated.get('number', args.number)} draft={updated.get('isDraft')}")
     return 0
 
 
