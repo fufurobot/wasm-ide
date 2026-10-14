@@ -10,6 +10,43 @@
     />
     <title>wasm-ide — runno + monaco in the browser</title>
     <script type="module" src="./frontend.tsx" async></script>
+    <!-- coi-bootstrap:start -->
+    <script>
+(function () {
+  var SW = "/coi-serviceworker.js";
+  var KEY = "wasm-ide:coi-reload-attempted";
+  var headers = {"Cross-Origin-Opener-Policy":"same-origin","Cross-Origin-Embedder-Policy":"require-corp"};
+  function attempted() {
+    try { return sessionStorage.getItem(KEY) === "1"; } catch (e) { return false; }
+  }
+  function markAttempted() {
+    try { sessionStorage.setItem(KEY, "1"); } catch (e) {}
+  }
+  function isolated() {
+    return typeof self !== "undefined" && self.crossOriginIsolated === true;
+  }
+  if (isolated()) return;
+  if (!("serviceWorker" in navigator)) return;
+  if (attempted()) {
+    console.warn(
+      "[wasm-ide] Cross-origin isolation could not be enabled by the service worker. " +
+      "Serving COOP/COEP headers from the host is required for the WebAssembly runtimes to work."
+    );
+    return;
+  }
+  navigator.serviceWorker.register(SW).then(function () {
+    return navigator.serviceWorker.ready;
+  }).then(function () {
+    if (!isolated()) {
+      markAttempted();
+      location.reload();
+    }
+  }).catch(function (error) {
+    console.warn("[wasm-ide] isolation service worker failed to register:", error);
+  });
+})();
+    </script>
+    <!-- coi-bootstrap:end -->
   </head>
   <body>
     <div id="root"></div>

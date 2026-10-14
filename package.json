@@ -4,14 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "bun run sync-html.ts --check && bun run build.ts",
+    "check:html": "bun run sync-html.ts --check",
     "dev": "bun --hot src/index.ts",
-    "start": "NODE_ENV=production bun src/index.ts",
     "preview": "NODE_ENV=production bun src/preview.ts",
-    "build": "bun run build.ts",
+    "start": "NODE_ENV=production bun src/index.ts",
+    "sync:html": "bun run sync-html.ts",
     "test": "bun test tests/unit",
-    "test:unit": "bun test tests/unit",
-    "test:e2e": "playwright test",
     "test:all": "bun run test:unit && bun run build && bun run test:e2e",
+    "test:e2e": "playwright test",
+    "test:unit": "bun test tests/unit",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
