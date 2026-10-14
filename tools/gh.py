@@ -41,14 +41,15 @@ Exit codes: 0 success, 1 API/transport error, 2 usage or missing token.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
+import ssl
 import sys
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 API_ROOT = "https://api.github.com"
 TOKEN_ENV = "DEEPSEEK_GITHUB_TOKEN"
@@ -63,7 +64,6 @@ class GitHubError(RuntimeError):
         self.status = status
         self.message = message
         self.url = url
-
 
 def load_dotenv(path: Path | None = None) -> None:
     """Populate os.environ from .env without echoing secrets."""
@@ -104,6 +104,7 @@ def request(
     token: str | None = None,
     raw: bool = False,
     accept: str = "application/vnd.github+json",
+    retries: int = 3,
 ) -> Any:
     """Perform one GitHub REST call.
 
@@ -129,16 +130,7 @@ def request(
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    req = urllib.request.Request(url, data=data, headers=headers, method=method.upper())
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            payload = resp.read().decode("utf-8", errors="replace")
-            status = resp.status
-    except urllib.error.HTTPError as exc:  # non-2xx
-        payload = exc.read().decode("utf-8", errors="replace")
-        raise GitHubError(exc.code, payload[:2000], url) from exc
-    except urllib.error.URLError as exc:
-        raise GitHubError(0, f"transport error: {exc.reason}", url) from exc
+    status, payload = _send(method.upper(), url, headers, data, retries)
 
     if status == 204 or not payload.strip():
         return None
@@ -148,6 +140,52 @@ def request(
         return json.loads(payload)
     except json.JSONDecodeError:
         return payload
+
+
+def _send(
+    method: str,
+    url: str,
+    headers: dict[str, str],
+    data: bytes | None,
+    retries: int,
+    timeout: float = 30.0,
+) -> tuple[int, str]:
+    """Send one HTTP request over a plain http.client connection.
+
+    ``urllib.request`` is deliberately avoided: on this host it stalls on the
+    POST path (it honours a proxy configuration that never answers), while
+    ``http.client`` talks to api.github.com directly and reliably.
+    """
+    parts = urlsplit(url)
+    host = parts.hostname or "api.github.com"
+    target = parts.path or "/"
+    if parts.query:
+        target += "?" + parts.query
+
+    ctx = ssl.create_default_context()
+    last: Exception | None = None
+
+    for attempt in range(retries + 1):
+        conn = None
+        try:
+            conn = http.client.HTTPSConnection(host, parts.port or 443, timeout=timeout, context=ctx)
+            conn.request(method, target, body=data, headers=headers)
+            resp = conn.getresponse()
+            body = resp.read().decode("utf-8", errors="replace")
+            if resp.status >= 400:
+                raise GitHubError(resp.status, body[:2000], url)
+            return resp.status, body
+        except GitHubError:
+            raise
+        except Exception as exc:  # transport-level: retry with backoff
+            last = exc
+            if attempt < retries:
+                time.sleep(1.5 * (attempt + 1))
+        finally:
+            if conn is not None:
+                conn.close()
+
+    raise GitHubError(0, f"transport error after {retries + 1} attempt(s): {last}", url)
 
 
 def api(method: str, path: str, body: Any = None) -> Any:
@@ -170,12 +208,6 @@ def _print(value: Any) -> None:
 def cmd_whoami(_: argparse.Namespace) -> int:
     user = api("GET", "/user")
     print(f"login: {user['login']}\nid: {user['id']}\ntype: {user['type']}")
-    scopes = request(
-        "GET",
-        "/user",
-        token=get_token(),
-        raw=True,
-    )
     return 0
 
 
