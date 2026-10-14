@@ -296,3 +296,21 @@ export function formatResult({ exitCode, durationMs }: RunSummary): string {
 export function outputToText(entries: OutputEntry[]): string {
   return entries.map(entry => entry.text).join("");
 }
+
+/**
+ * Pick the trustworthy transcript when a run finishes.
+ *
+ * Runno emits stdout/stderr from its worker via `postMessage`, but
+ * `await instance.start()` resolves on `proc_exit`, which can beat the final
+ * message through the queue. The result object can therefore be missing its
+ * last line while a longer streamed transcript already holds it.
+ *
+ * Rather than guess which source is authoritative, take the longer one: a
+ * truncated tail is the failure mode we actually observed, and the streamed
+ * copy is a strict prefix-match of the final copy in the normal case.
+ */
+export function reconcileOutput(streamed: string, final: string): string {
+  if (!streamed) return final;
+  if (!final) return streamed;
+  return streamed.length >= final.length ? streamed : final;
+}

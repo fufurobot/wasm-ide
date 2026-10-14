@@ -21,14 +21,34 @@ async function waitForEditor(page: Page) {
   return editor;
 }
 
-/** Replace the whole editor buffer with `code` via the keyboard. */
-async function setEditorContent(page: Page, code: string) {
+/**
+ * Replace the whole editor buffer with `code`.
+ *
+ * Monaco resists naive typing: `insertText` can append rather than replace, and
+ * auto-closing bracket pairs corrupt pasted source. The reliable route is to
+ * drive the model directly through the global Monaco API that
+ * `@monaco-editor/react` exposes.
+ *
+ * Returns false when Monaco has not attached a model yet, so callers can poll.
+ */
+async function setEditorContent(page: Page, code: string): Promise<boolean> {
+  return page.evaluate(source => {
+    type MonacoModel = { setValue: (value: string) => void };
+    const monaco = (
+      window as unknown as { monaco?: { editor?: { getModels?: () => MonacoModel[] } } }
+    ).monaco;
+    const models = monaco?.editor?.getModels?.() ?? [];
+    if (models.length === 0) return false;
+    // setValue replaces the buffer outright.
+    models[0]!.setValue(source);
+    return true;
+  }, code);
+}
+
+/** Wait for Monaco, then replace the buffer, retrying until the model exists. */
+async function fillEditor(page: Page, code: string) {
   await waitForEditor(page);
-  await page.locator(".monaco-editor textarea").first().click();
-  await page.keyboard.press("ControlOrMeta+a");
-  await page.keyboard.press("Delete");
-  // Monaco auto-closes brackets; insertText bypasses that and pastes verbatim.
-  await page.keyboard.insertText(code);
+  await expect.poll(async () => setEditorContent(page, code), { timeout: 20_000 }).toBe(true);
 }
 
 const TERMINAL = '[data-testid="terminal-output"]';
@@ -58,7 +78,7 @@ test.describe("wasm-ide", () => {
 
   test("runs edited C code through clang", async ({ page }) => {
     await page.locator(LANGUAGE_PICKER).selectOption("c");
-    await setEditorContent(
+    await fillEditor(
       page,
       ['#include <stdio.h>', "int main(void) {", '  printf("C-RUNTIME-OK\\n");', "  return 0;", "}"].join(
         "\n",
@@ -71,7 +91,7 @@ test.describe("wasm-ide", () => {
 
   test("feeds stdin into the running program", async ({ page }) => {
     await page.locator(LANGUAGE_PICKER).selectOption("python");
-    await setEditorContent(page, 'name = input("who? ")\nprint(f"hello {name}")');
+    await fillEditor(page, 'name = input("who? ")\nprint(f"hello {name}")');
 
     await page.locator('[data-testid="stdin-input"]').fill("wasm");
     await page.locator(RUN_BUTTON).click();
@@ -81,7 +101,7 @@ test.describe("wasm-ide", () => {
 
   test("surfaces stderr and a non-zero exit code", async ({ page }) => {
     await page.locator(LANGUAGE_PICKER).selectOption("python");
-    await setEditorContent(page, 'import sys\nprint("to stderr", file=sys.stderr)\nsys.exit(3)');
+    await fillEditor(page, 'import sys\nprint("to stderr", file=sys.stderr)\nsys.exit(3)');
 
     await page.locator(RUN_BUTTON).click();
 
@@ -113,7 +133,7 @@ test.describe("wasm-ide", () => {
 
   test("share permalink restores the workspace after reload", async ({ page }) => {
     await page.locator(LANGUAGE_PICKER).selectOption("python");
-    await setEditorContent(page, 'print("PERMALINK-ROUNDTRIP")');
+    await fillEditor(page, 'print("PERMALINK-ROUNDTRIP")');
 
     await page.locator('[data-testid="share-button"]').click();
 

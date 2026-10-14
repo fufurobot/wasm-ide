@@ -16,6 +16,7 @@ import {
   buildRunRequest,
   formatResult,
   mergeOutput,
+  reconcileOutput,
   type EditorLanguage,
   type OutputEntry,
 } from "@/lib/ide";
@@ -52,9 +53,19 @@ export type RunArgs = {
   stdin: string;
 };
 
+/** Raw text Runno pushed out of its worker, kept separately from the UI log. */
+type StreamedText = { stdout: string[]; stderr: string[] };
+
 export function useRunner() {
   const [state, setState] = useState<RunnerState>(INITIAL);
   const runIdRef = useRef(0);
+  /**
+   * Text Runno pushed out of its worker during the current run.
+   *
+   * Kept in a ref rather than state because it is a transcript for
+   * reconciliation, not something the UI renders directly.
+   */
+  const streamRef = useRef<StreamedText>({ stdout: [], stderr: [] });
 
   // Abort state updates from a superseded run (e.g. the user hit Run twice).
   const isCurrent = useCallback((id: number) => runIdRef.current === id, []);
@@ -67,6 +78,7 @@ export function useRunner() {
   const run = useCallback(
     async ({ language, source, stdin }: RunArgs) => {
       const id = ++runIdRef.current;
+      streamRef.current = { stdout: [], stderr: [] };
 
       let request;
       try {
@@ -162,12 +174,20 @@ export function useRunner() {
           return;
         }
 
-        // Complete result: stdout and stderr are already fully collected.
+        // Complete result. Runno accumulates stdout/stderr in its worker and
+        // returns them here, but `start()` resolves on proc_exit and can beat
+        // the worker's final postMessage through the queue, so the returned
+        // text may be short by one chunk. reconcileOutput takes whichever
+        // transcript is longer rather than trusting one blindly.
+        const streamed = streamRef.current;
+        const stdout = reconcileOutput(streamed.stdout.join(""), result.stdout);
+        const stderr = reconcileOutput(streamed.stderr.join(""), result.stderr);
+
         setState({
           status: "done",
           output: mergeOutput([
-            { stream: "stdout", text: result.stdout },
-            { stream: "stderr", text: result.stderr },
+            { stream: "stdout" as const, text: stdout },
+            { stream: "stderr" as const, text: stderr },
           ]),
           exitCode: result.exitCode,
           durationMs,
