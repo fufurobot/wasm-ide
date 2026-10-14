@@ -1,4 +1,21 @@
-# wasm-ide
-a wasm ide built on runno and monaco, designed to run completely statically on browser.
+# bun-react-tailwind-shadcn-template
 
-github page is required to demostrate it.
+To install dependencies:
+
+```bash
+bun install
+```
+
+To start a development server:
+
+```bash
+bun dev
+```
+
+To run for production:
+
+```bash
+bun start
+```
+
+This project was created using `bun init` in bun v1.4.2. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
