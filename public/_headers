@@ -1,0 +1,34 @@
+# Cross-origin isolation headers for header-capable static hosts.
+#
+# The Runno runtimes need `SharedArrayBuffer`, which browsers only expose to
+# cross-origin-isolated documents. Without these headers every Run fails with
+# "SharedArrayBuffer is not defined".
+#
+# This file is honoured by Cloudflare Pages and Netlify (and by anything using
+# the `_headers` convention). GitHub Pages ignores it entirely — which is why
+# the build also ships `coi-serviceworker.js` as a fallback. Where a host
+# supports headers, the service worker detects that the document is already
+# isolated and does nothing, so shipping both is safe.
+#
+# /coi-serviceworker.js is deliberately excluded from caching so a stale copy
+# can never keep a broken isolation shim alive.
+
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: cross-origin
+  X-Content-Type-Options: nosniff
+
+# The app shell should never be cached aggressively: a stale index.html can
+# reference bundle hashes that no longer exist.
+/
+  Cache-Control: no-cache
+
+/coi-serviceworker.js
+  Cache-Control: no-cache
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+
+# Content-hashed bundles are safe to cache forever.
+/chunk-*
+  Cache-Control: public, max-age=31536000, immutable
