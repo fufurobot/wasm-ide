@@ -89,7 +89,7 @@ jobs:
 
       - name: Upload artifacts for tag-only pushes
         if: github.event_name != 'release'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wasm-ide-dist-${{ github.ref_name }}
           path: wasm-ide-*-dist.tar.gz*
