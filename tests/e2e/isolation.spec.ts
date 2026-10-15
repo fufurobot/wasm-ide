@@ -12,20 +12,37 @@
  * happened to send. Without it, every Run in production would fail.
  */
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+/** Strip the isolation headers from same-origin responses, as Pages would. */
+async function stripIsolationHeaders(page: Page) {
+  await page.route("**/*", async route => {
+    const url = new URL(route.request().url());
+    // Only touch our own origin. Monaco is loaded from a CDN, and intercepting
+    // third-party requests leaves routes in flight when the test ends
+    // ("route.fetch: Test ended") as well as slowing every run down.
+    if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    const headers = { ...response.headers() };
+    delete headers["cross-origin-opener-policy"];
+    delete headers["cross-origin-embedder-policy"];
+    delete headers["cross-origin-resource-policy"];
+    await route.fulfill({ response, headers });
+  });
+}
 
 test.describe("cross-origin isolation without host headers", () => {
   test.beforeEach(async ({ page }) => {
-    // Simulate GitHub Pages: no COOP/COEP on any response. Playwright applies
-    // this to every request the page makes, including the worker script.
-    await page.route("**/*", async route => {
-      const response = await route.fetch();
-      const headers = { ...response.headers() };
-      delete headers["cross-origin-opener-policy"];
-      delete headers["cross-origin-embedder-policy"];
-      delete headers["cross-origin-resource-policy"];
-      await route.fulfill({ response, headers });
-    });
+    // Simulate GitHub Pages: no COOP/COEP on any same-origin response.
+    await stripIsolationHeaders(page);
+  });
+
+  test.afterEach(async ({ page }) => {
+    // Let any in-flight route callback settle before teardown.
+    await page.unrouteAll({ behavior: "ignoreErrors" });
   });
 
   test("the service worker makes the document cross-origin isolated", async ({ page }) => {
