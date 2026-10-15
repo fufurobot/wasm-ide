@@ -28,7 +28,10 @@ export const COI_HEADERS: Record<string, string> = {
  * It must sit at the site root: a worker's scope is limited to its own
  * directory, and the wasm assets live at the root of the Pages deployment.
  */
-export const COI_SW_PATH = "/coi-serviceworker.js";
+export const COI_SW_PATH = "./coi-serviceworker.js";
+
+/** File name alone, for matching a resolved pathname regardless of base. */
+export const COI_SW_FILENAME = "coi-serviceworker.js";
 
 /** sessionStorage key recording that we already tried the reload. */
 export const COI_ATTEMPT_KEY = "wasm-ide:coi-reload-attempted";
@@ -56,11 +59,12 @@ export function shouldIsolate(url: string, origin: string, destination: string):
   if (!destination) return false;
   if (!isSameOrigin(url, origin)) return false;
   try {
-    if (new URL(url, origin).pathname === COI_SW_PATH) return false;
+    // Compare by file name: the worker may be served from a subpath, so a
+    // pathname equality check against a relative constant would never match.
+    return !new URL(url, origin).pathname.endsWith(`/${COI_SW_FILENAME}`);
   } catch {
     return false;
   }
-  return true;
 }
 
 export type IsolationInput = {
@@ -135,6 +139,11 @@ export function coiBootstrapScript(): string {
   var SW = ${JSON.stringify(COI_SW_PATH)};
   var KEY = ${JSON.stringify(COI_ATTEMPT_KEY)};
   var headers = ${JSON.stringify(COI_HEADERS)};
+  // Resolve relative to the document so subpath deployments (GitHub Pages
+  // project sites at /<repo>/) work. An absolute "/coi-serviceworker.js" would
+  // 404 there and silently leave the page unable to run any WebAssembly.
+  var swUrl = new URL(SW, document.baseURI).href;
+  var base = new URL(".", document.baseURI).pathname;
   function attempted() {
     try { return sessionStorage.getItem(KEY) === "1"; } catch (e) { return false; }
   }
@@ -153,7 +162,7 @@ export function coiBootstrapScript(): string {
     );
     return;
   }
-  navigator.serviceWorker.register(SW).then(function () {
+  navigator.serviceWorker.register(swUrl, { scope: base }).then(function () {
     return navigator.serviceWorker.ready;
   }).then(function () {
     if (!isolated()) {

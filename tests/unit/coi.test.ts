@@ -28,11 +28,24 @@ describe("COI_HEADERS", () => {
 });
 
 describe("service worker path", () => {
-  test("is served from the site root so its scope covers the app", () => {
-    // A worker at /sub/sw.js cannot control /, and the wasm assets live at the
-    // root of the Pages deployment.
-    expect(COI_SW_PATH.startsWith("/")).toBe(true);
+  test("is relative, so subpath deployments resolve it", () => {
+    // This is the bug that broke production. GitHub Pages project sites are
+    // served from /<repo>/, so an absolute "/coi-serviceworker.js" resolved to
+    // https://fufurobot.github.io/coi-serviceworker.js and 404'd, while the
+    // file actually shipped to /wasm-ide/coi-serviceworker.js.
+    expect(COI_SW_PATH.startsWith("/")).toBe(false);
     expect(COI_SW_PATH.endsWith(".js")).toBe(true);
+  });
+
+  test("resolves against a subpath base the way a browser would", () => {
+    // Path-relative resolution: "./x.js" at /wasm-ide/ -> /wasm-ide/x.js
+    const resolved = new URL(COI_SW_PATH, "https://example.com/wasm-ide/").pathname;
+    expect(resolved).toBe("/wasm-ide/coi-serviceworker.js");
+  });
+
+  test("still resolves correctly when served from the domain root", () => {
+    const resolved = new URL(COI_SW_PATH, "https://example.com/").pathname;
+    expect(resolved).toBe("/coi-serviceworker.js");
   });
 });
 
@@ -67,7 +80,11 @@ describe("shouldIsolate", () => {
   });
 
   test("skips the worker itself so it cannot recurse", () => {
-    expect(shouldIsolate(`https://example.com${COI_SW_PATH}`, "https://example.com", "script")).toBe(
+    // Resolved under a subpath base, as it would be in production.
+    expect(
+      shouldIsolate("https://example.com/wasm-ide/coi-serviceworker.js", "https://example.com", "script"),
+    ).toBe(false);
+    expect(shouldIsolate("https://example.com/coi-serviceworker.js", "https://example.com", "script")).toBe(
       false,
     );
   });

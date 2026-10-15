@@ -29,6 +29,13 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
 
+# GitHub Pages project sites serve the build from /<repo>/, so cover that
+# request path too.
+/wasm-ide/coi-serviceworker.js
+  Cache-Control: no-cache
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+
 # Content-hashed bundles are safe to cache forever.
 /chunk-*
   Cache-Control: public, max-age=31536000, immutable

@@ -13,9 +13,14 @@
     <!-- coi-bootstrap:start -->
     <script>
 (function () {
-  var SW = "/coi-serviceworker.js";
+  var SW = "./coi-serviceworker.js";
   var KEY = "wasm-ide:coi-reload-attempted";
   var headers = {"Cross-Origin-Opener-Policy":"same-origin","Cross-Origin-Embedder-Policy":"require-corp"};
+  // Resolve relative to the document so subpath deployments (GitHub Pages
+  // project sites at /<repo>/) work. An absolute "/coi-serviceworker.js" would
+  // 404 there and silently leave the page unable to run any WebAssembly.
+  var swUrl = new URL(SW, document.baseURI).href;
+  var base = new URL(".", document.baseURI).pathname;
   function attempted() {
     try { return sessionStorage.getItem(KEY) === "1"; } catch (e) { return false; }
   }
@@ -34,7 +39,7 @@
     );
     return;
   }
-  navigator.serviceWorker.register(SW).then(function () {
+  navigator.serviceWorker.register(swUrl, { scope: base }).then(function () {
     return navigator.serviceWorker.ready;
   }).then(function () {
     if (!isolated()) {

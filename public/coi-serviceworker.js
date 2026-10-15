@@ -23,7 +23,7 @@ const COI_HEADERS = {
   "Cross-Origin-Embedder-Policy": "require-corp",
 };
 
-const SW_PATH = "/coi-serviceworker.js";
+const SW_FILENAME = "coi-serviceworker.js";
 
 self.addEventListener("install", () => {
   // Take over as soon as possible; the page will reload to apply headers.
@@ -75,7 +75,7 @@ self.addEventListener("fetch", event => {
   }
   if (url.origin !== self.location.origin) return;
   if (!url.protocol.startsWith("http")) return;
-  if (url.pathname === SW_PATH) return;
+  if (url.pathname.endsWith("/" + SW_FILENAME)) return;
   if (!request.destination) return;
 
   event.respondWith(

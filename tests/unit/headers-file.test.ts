@@ -10,7 +10,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { COI_HEADERS, COI_SW_PATH } from "@/lib/coi";
+import { COI_HEADERS, COI_SW_FILENAME } from "@/lib/coi";
 
 const HEADERS_FILE = join(import.meta.dir, "..", "..", "public", "_headers");
 const body = readFileSync(HEADERS_FILE, "utf8");
@@ -43,16 +43,25 @@ describe("public/_headers", () => {
   });
 
   test("also covers the service worker path", () => {
-    const sw = headersFor(COI_SW_PATH);
-    expect(sw["Cross-Origin-Opener-Policy"]).toBe(COI_HEADERS["Cross-Origin-Opener-Policy"]);
-    expect(sw["Cross-Origin-Embedder-Policy"]).toBe(COI_HEADERS["Cross-Origin-Embedder-Policy"]);
+    // Hosts match rules against request paths, so these stay absolute even
+    // though the bootstrap registers the worker relatively. Both the domain
+    // root and the GitHub Pages project-subpath form are covered.
+    for (const rule of [`/${COI_SW_FILENAME}`, `/wasm-ide/${COI_SW_FILENAME}`]) {
+      const sw = headersFor(rule);
+      expect(`${rule} COOP: ${sw["Cross-Origin-Opener-Policy"]}`).toBe(
+        `${rule} COOP: ${COI_HEADERS["Cross-Origin-Opener-Policy"]}`,
+      );
+      expect(`${rule} COEP: ${sw["Cross-Origin-Embedder-Policy"]}`).toBe(
+        `${rule} COEP: ${COI_HEADERS["Cross-Origin-Embedder-Policy"]}`,
+      );
+    }
   });
 
   test("prevents caching of the app shell and the worker", () => {
     // A stale index.html would reference bundle hashes that no longer exist,
     // and a stale worker could keep a broken shim alive.
     expect(headersFor("/")["Cache-Control"]).toContain("no-cache");
-    expect(headersFor(COI_SW_PATH)["Cache-Control"]).toContain("no-cache");
+    expect(headersFor(`/${COI_SW_FILENAME}`)["Cache-Control"]).toContain("no-cache");
   });
 
   test("allows hashed chunks to be cached immutably", () => {
@@ -60,6 +69,6 @@ describe("public/_headers", () => {
   });
 
   test("names the service worker it depends on", () => {
-    expect(body).toContain(COI_SW_PATH);
+    expect(body).toContain(COI_SW_FILENAME);
   });
 });
