@@ -9,6 +9,11 @@
  * This test reads the built HTML, extracts every relative asset reference, and
  * asserts each one exists in `dist/`. It would have caught the 404 before
  * deployment.
+ *
+ * It lives in `tests/dist/` rather than `tests/unit/` because it needs a real
+ * build: CI runs the unit suite *before* `bun run build`, so a dist-dependent
+ * test in there fails for ordering reasons rather than for real breakage. The
+ * `test:dist` script runs after the build.
  */
 
 import { beforeAll, describe, expect, test } from "bun:test";

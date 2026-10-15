@@ -11,7 +11,8 @@
     "start": "NODE_ENV=production bun src/index.ts",
     "sync:html": "bun run sync-html.ts",
     "test": "bun test tests/unit",
-    "test:all": "bun run test:unit && bun run build && bun run test:e2e",
+    "test:all": "bun run test:unit && bun run build && bun run test:dist && bun run test:e2e",
+    "test:dist": "bun test tests/dist",
     "test:e2e": "playwright test",
     "test:unit": "bun test tests/unit",
     "typecheck": "tsc --noEmit"

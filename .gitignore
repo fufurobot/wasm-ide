@@ -135,3 +135,7 @@ dist
 # release packaging output
 wasm-ide-*-dist.tar.gz
 wasm-ide-*-dist.tar.gz.sha256
+
+# Python bytecode from tools/gh.py: compiled artifacts are never source
+__pycache__/
+*.py[cod]
