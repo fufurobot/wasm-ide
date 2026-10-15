@@ -89,6 +89,20 @@ If you host this yourself, either send the two headers (preferred — faster, no
 rely on the bundled worker. If neither is possible, the bootstrap warns once and gives up
 rather than reloading in a loop.
 
+The build additionally ships `public/_headers`, which Cloudflare Pages and Netlify honour
+natively (GitHub Pages ignores it). Both mechanisms ship safely together: when the document is
+already isolated the bootstrap returns immediately and never registers the worker, so a
+header-capable host gets isolation with no reload at all.
+`tests/unit/headers-file.test.ts` keeps `_headers` in agreement with the tested policy in
+`src/lib/coi.ts`, so the two cannot drift apart.
+
+| Host | Isolation mechanism | First-visit reload |
+| --- | --- | --- |
+| `bun run preview` | response headers | no |
+| Cloudflare Pages / Netlify | `_headers` | no |
+| GitHub Pages | `coi-serviceworker.js` | once |
+| Any other static host | `coi-serviceworker.js` | once |
+
 ## How the code is organised
 
 ```
