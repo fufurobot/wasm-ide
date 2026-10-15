@@ -50,9 +50,11 @@ bun run preview        # serve dist/ exactly as a static host would
 
 ```bash
 bun run typecheck      # tsc --noEmit
-bun run test:unit      # pure core + repo hygiene, fast
+bun run test:unit      # pure core + repo hygiene, fast, no build needed
+bun run build          # static bundle -> dist/
+bun run test:dist      # asserts every asset dist/index.html references exists
 bun run test:e2e       # Playwright, real wasm execution in Chromium
-bun run test:all       # unit + build + e2e
+bun run test:all       # unit + build + dist + e2e
 ```
 
 The unit suite runs in Bun with no browser. The e2e suite needs a browser once:
@@ -103,6 +105,19 @@ header-capable host gets isolation with no reload at all.
 | GitHub Pages | `coi-serviceworker.js` | once |
 | Any other static host | `coi-serviceworker.js` | once |
 
+**Test it the way it is deployed.** A GitHub Pages *project* site serves from
+`/<repo>/`, and isolation bugs can hide behind a domain-root preview — one did:
+the worker was registered at an absolute `/coi-serviceworker.js`, which 404'd
+under the subpath and left the deployed site unable to run any code while every
+local test passed. `bun run preview:subpath` reproduces that shape (subpath, no
+COOP/COEP headers) and `tests/e2e/subpath.spec.ts` guards it.
+
+```bash
+bun run build
+bun run preview:subpath        # http://127.0.0.1:3100/wasm-ide/
+SUBPATH_BASE_URL=http://127.0.0.1:3100/wasm-ide bun run test:e2e
+```
+
 ## How the code is organised
 
 ```
@@ -113,7 +128,8 @@ src/components/IDE.tsx  the workspace shell
 src/components/Terminal.tsx
 src/components/LanguagePicker.tsx
 public/coi-serviceworker.js  injects COOP/COEP where the host cannot
-src/preview.ts          static file server for dist/ (mirrors Pages, no /api, no rewrites)
+src/preview.ts          static file server for dist/ at the domain root
+src/preview-subpath.ts  serves dist/ under /wasm-ide/, like a Pages project site
 build.ts                bun bundler -> dist/ (+ copies public/)
 sync-html.ts            generates the inline bootstrap; build runs it with --check
 tests/unit/             Bun unit tests
