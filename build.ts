@@ -35,3 +35,16 @@ for (const output of result.outputs) {
 // and it must be able to intercept the whole app.
 await cp(path.join(process.cwd(), "public"), outdir, { recursive: true });
 console.log(" public/  -> dist/ (copied verbatim)");
+
+// Root-level assets referenced by relative path from index.html.
+//
+// Bun only emits what the HTML module graph pulls in, and an svg linked with a
+// plain `href` is not part of that graph, so it must be copied explicitly.
+// Without this the favicon 404s in production while the app still renders - a
+// silent breakage that tests/unit/bundle-assets.test.ts now guards against.
+for (const asset of ["logo.svg", "react.svg"]) {
+  const from = path.join(process.cwd(), "src", asset);
+  if (!(await Bun.file(from).exists())) continue;
+  await cp(from, path.join(outdir, asset));
+  console.log(` src/${asset}  -> dist/${asset}`);
+}

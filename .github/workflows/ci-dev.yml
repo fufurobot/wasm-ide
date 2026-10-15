@@ -51,6 +51,11 @@ jobs:
       - name: Build static bundle
         run: bun run build
 
+      # Runs after the build: these tests inspect dist/ and would fail on
+      # ordering, not correctness, if they ran in the unit phase.
+      - name: Built-bundle tests
+        run: bun run test:dist
+
       - name: Assert the isolation worker shipped
         run: |
           set -eu
