@@ -36,6 +36,17 @@
     -->
     <div id="root"></div>
 
+    <script>
+      // A CDN hiccup should read as a visible error, not a blank page.
+      window.addEventListener("error", event => {
+        const box = document.createElement("pre");
+        box.dataset.testid = "boot-error";
+        box.style.cssText = "color:#f87171;padding:16px;font:12px monospace;white-space:pre-wrap";
+        box.textContent = "boot error: " + (event.message || event.error);
+        document.body.appendChild(box);
+      });
+    </script>
+
     <script type="module">
       import { createElement } from "react";
       import { createRoot } from "react-dom/client";

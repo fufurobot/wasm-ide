@@ -16,12 +16,19 @@
 
 import { expect, test, type Page } from "@playwright/test";
 
+// Consumer pages boot React/Monaco from a CDN and then download a cold wasm
+// toolchain on first Run, so this file needs a larger budget than the app
+// suites. Per-assertion timeouts below remain the real guard.
+test.setTimeout(600_000);
+
 const BASE = process.env.LIB_BASE_URL;
 
 test.describe("library consumers", () => {
   test.skip(!BASE, "set LIB_BASE_URL to run the library integration suite");
 
-  async function waitForTerminalText(page: Page, needle: string, timeout = 240_000) {
+  // First run downloads a multi-megabyte wasm image; 240s is deliberately
+  // generous so a slow CDN never reads as a library failure.
+  async function waitForTerminalText(page: Page, needle: string, timeout = 300_000) {
     await expect(page.locator('[data-testid="terminal-output"]').first()).toContainText(needle, {
       timeout,
     });
@@ -82,7 +89,9 @@ test.describe("library consumers", () => {
 
   test("react: <WasmIDE /> mounts and runs code", async ({ page }) => {
     await page.goto(`${BASE}/react.html`);
-    await expect(page.locator(".monaco-editor").first()).toBeVisible({ timeout: 60_000 });
+    // The fixture resolves React and Monaco from a CDN, so allow for a cold
+    // fetch of ~11 modules; this is fixture boot time, not library behaviour.
+    await expect(page.locator(".monaco-editor").first()).toBeVisible({ timeout: 180_000 });
 
     await page.locator("[data-testid='run-button']").first().click();
     await waitForTerminalText(page, "fib(9) = 34");
@@ -92,7 +101,7 @@ test.describe("library consumers", () => {
     await page.goto(`${BASE}/react.html?lang=c`);
 
     // The C sample is what the prop asks for; running it must print its marker.
-    await expect(page.locator(".monaco-editor").first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator(".monaco-editor").first()).toBeVisible({ timeout: 180_000 });
     await page.locator("[data-testid='run-button']").first().click();
     await waitForTerminalText(page, "square(5) = 25");
   });

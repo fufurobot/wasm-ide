@@ -22,8 +22,14 @@ const executablePath = process.env.PW_CHROMIUM_EXECUTABLE;
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  // ONE browser at a time, always. This is a deliberate resource constraint:
+  // each Chromium instance boots a Monaco editor and compiles multi-megabyte
+  // wasm toolchains, and running several at once exhausts the machine. It also
+  // means two Playwright invocations must never be started concurrently - run
+  // one suite, wait for it, then run the next.
   fullyParallel: false,
   workers: 1,
+  maxFailures: 0,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   timeout: 300_000,
