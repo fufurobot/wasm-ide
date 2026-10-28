@@ -52,12 +52,25 @@ test.describe("library consumers", () => {
     await expect(page.locator("[data-testid='mount-status']")).toHaveText("mounted");
 
     const api = await page.evaluate(() => {
-      const handle = (window as unknown as { ide: Record<string, unknown> }).ide;
+      const handle = (window as unknown as {
+        ide?: {
+          destroy?: unknown;
+          setLanguage?: unknown;
+          setSource?: unknown;
+          getState?: () => unknown;
+        };
+      }).ide;
+
+      const state =
+        typeof handle?.getState === "function"
+          ? (JSON.parse(JSON.stringify(handle.getState())) as { language?: string })
+          : null;
+
       return {
         hasDestroy: typeof handle?.destroy === "function",
         hasSetLanguage: typeof handle?.setLanguage === "function",
         hasSetSource: typeof handle?.setSource === "function",
-        state: handle?.getState ? JSON.parse(JSON.stringify(handle.getState())) : null,
+        state,
       };
     });
 

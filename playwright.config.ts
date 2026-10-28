@@ -1,9 +1,9 @@
 /**
  * Playwright config for the wasm IDE.
  *
- * Point `PW_BASE_URL` at an already-running preview (CI uses this after
- * `bun run build` + `bun run preview`) or omit it to let Playwright boot
- * `bun run dev` itself.
+ * Servers are always external: different suites need different deployment
+ * shapes (domain root, a /<repo>/ subpath, and the published-library fixtures),
+ * so each is started by its own script and pointed at with an env var.
  *
  * Wasm runtimes are downloaded on first use and compiled in the browser, so
  * timeouts are generous and tests run serially to avoid competing for CPU.
@@ -12,7 +12,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.PW_BASE_URL ?? "http://127.0.0.1:3000";
-const useExternalServer = Boolean(process.env.PW_BASE_URL);
+
+/**
+ * Set `PW_CHROMIUM_EXECUTABLE` to use an already-installed browser (for
+ * example `/usr/bin/chromium` in CI images that ship one) instead of
+ * Playwright's own download.
+ */
+const executablePath = process.env.PW_CHROMIUM_EXECUTABLE;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -27,15 +33,16 @@ export default defineConfig({
     baseURL,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    video: "retain-on-failure",
+    // Video needs Playwright's bundled ffmpeg. When running against a system
+    // browser (PW_CHROMIUM_EXECUTABLE), that binary may be absent while the
+    // browser itself is fine, so recording is opt-in rather than breaking the
+    // whole suite.
+    video: process.env.PW_VIDEO === "1" ? "retain-on-failure" : "off",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: useExternalServer
-    ? undefined
-    : {
-        command: "bun run dev",
-        url: baseURL,
-        reuseExistingServer: !process.env.CI,
-        timeout: 300_000,
-      },
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"], ...(executablePath ? { launchOptions: { executablePath } } : {}) },
+    },
+  ],
 });

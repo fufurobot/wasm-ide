@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationMap": true,
+    "outDir": "dist-lib/types",
+    "rootDir": "src",
+    "types": ["bun", "react"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"]
+  },
+  "include": [
+    "src/entry.ts",
+    "src/vanilla.tsx",
+    "src/components/WasmIDE.tsx",
+    "src/components/IDE.tsx",
+    "src/components/Terminal.tsx",
+    "src/components/LanguagePicker.tsx",
+    "src/components/ui/**/*.tsx",
+    "src/hooks/useRunner.ts",
+    "src/lib/**/*.ts"
+  ],
+  "exclude": ["dist", "dist-lib", "node_modules", "tests"]
+}
