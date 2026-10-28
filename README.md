@@ -54,6 +54,8 @@ bun run test:unit      # pure core + repo hygiene, fast, no build needed
 bun run build          # static bundle -> dist/
 bun run test:dist      # asserts every asset dist/index.html references exists
 bun run test:e2e       # Playwright, real wasm execution in Chromium
+bun run build:lib      # npm package -> dist-lib/
+bun run test:lib       # browser tests against the BUILT package
 bun run test:all       # unit + build + dist + e2e
 ```
 
@@ -66,6 +68,93 @@ bunx playwright install chromium
 End-to-end tests run against the **built** bundle via `bun run preview`, not the dev server,
 so they exercise the same static-hosting shape GitHub Pages uses — including the assertion
 that no `/api/` request is ever made.
+
+## Use it as an npm package
+
+The package is published to GitHub Packages as **`@fufurobot/wasm-ide`**, with two
+entry points — pick whichever fits your project.
+
+### Install
+
+GitHub Packages requires authentication even for public packages, and requires a
+scoped registry. Add an `.npmrc` to your project:
+
+```ini
+@fufurobot:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NPM_TOKEN}
+```
+
+...where `NPM_TOKEN` is a classic PAT with `read:packages`. Then:
+
+```bash
+npm install @fufurobot/wasm-ide
+```
+
+### 1. React
+
+```tsx
+import { WasmIDE } from "@fufurobot/wasm-ide";
+
+export function Playground() {
+  return <WasmIDE language="python" height="600px" />;
+}
+```
+
+Props: `language`, `source`, `stdin`, `theme`, `showShareButton`, `showDownloadButton`,
+`height`, `onSourceChange`, `onRunComplete`, `onReady`.
+
+Need a custom layout instead of the batteries-included workspace? The building blocks
+are exported too — `IDE`, `Terminal`, `LanguagePicker`, and the headless `useRunner`
+hook, which runs WebAssembly with no editor at all.
+
+### 2. Plain JavaScript (no bundler, no React)
+
+```html
+<div id="ide"></div>
+<script type="module">
+  import { createIDE } from "@fufurobot/wasm-ide/vanilla";
+
+  const ide = createIDE({
+    target: document.getElementById("ide"),
+    language: "c",
+    height: "600px",
+  });
+
+  ide.getState();               // { language, source, stdin }
+  ide.setSource("int main(){}") // replace the buffer
+  ide.destroy();                // unmount
+</script>
+```
+
+The vanilla entry **inlines React, Monaco's loader and Runno** (~2.3 MB), because a page
+without a bundler cannot resolve a bare module specifier. That is the trade for zero
+setup. The React entry leaves them external so your bundler deduplicates them.
+
+### Cross-origin isolation requirement
+
+Both entries run WebAssembly with threads, which needs `SharedArrayBuffer`, which
+browsers only expose to cross-origin-isolated documents. Your host must send:
+
+```
+Cross-Origin-Opener-Policy:   same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+If it cannot (GitHub Pages cannot at all), ship the worker that comes with the package:
+
+```js
+// copy dist-lib/coi-serviceworker.js to your site root, then, before your app:
+navigator.serviceWorker.register("/coi-serviceworker.js").then(() => location.reload());
+```
+
+Or use the exported helpers: `coiBootstrapScript()` returns the inline script, and
+`planIsolation()` tells you what to do for a given `crossOriginIsolated` state.
+Without isolation, the IDE renders normally but **every Run fails** with
+`SharedArrayBuffer is not defined`.
+
+### Types
+
+Full `.d.ts` declarations ship with both entries; no `@types` package needed.
 
 ## Cross-origin isolation (important for hosting)
 
@@ -121,6 +210,12 @@ SUBPATH_BASE_URL=http://127.0.0.1:3100/wasm-ide bun run test:e2e
 ## How the code is organised
 
 ```
+src/entry.ts            public React entry of the npm package
+src/vanilla.tsx         plain-JS createIDE() entry
+src/lib/embed.ts        option normaliser shared by both entries
+src/components/WasmIDE.tsx  prop-driven <WasmIDE /> shell
+build-lib.ts            library build (per-entry dependency policy)
+fix-lib-types.ts        promotes declarations, rewrites "@/..." aliases
 src/lib/ide.ts          pure core: language catalog, permalink codec, run requests
 src/lib/coi.ts          cross-origin isolation policy (pure, unit tested)
 src/hooks/useRunner.ts  drives the Runno headless API and collects output
@@ -185,7 +280,7 @@ release is pushed.**
 | --- | --- | --- |
 | [`ci-dev.yml`](.github/workflows/ci-dev.yml) | push/PR to `dev` | typecheck, unit tests, build, secret grep |
 | [`ci-main.yml`](.github/workflows/ci-main.yml) | push/PR to `main` | the above **plus** full Playwright e2e, then deploys to GitHub Pages |
-| [`release.yml`](.github/workflows/release.yml) | release published or `v*` tag | unit tests, build, attach `dist` tarball + sha256 to the release |
+| [`release.yml`](.github/workflows/release.yml) | release published or `v*` tag | unit tests, builds the web app **and** the npm package, attaches `dist` tarball + sha256, and **publishes `@fufurobot/wasm-ide` to GitHub Packages** (version taken from the tag) |
 
 Red CI on `dev` is acceptable; `main` is the gate. Dependabot is configured in
 [`dependabot.yml`](.github/dependabot.yml) and targets `dev` so dependency churn proves

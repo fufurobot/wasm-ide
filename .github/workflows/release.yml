@@ -14,6 +14,8 @@ on:
 
 permissions:
   contents: write
+  # Required by `npm publish` to GitHub Packages.
+  packages: write
 
 jobs:
   publish:
@@ -33,6 +35,27 @@ jobs:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
+
+      # The release tag is the source of truth for the package version, so the
+      # published tarball and the GitHub Release can never disagree.
+      - name: Set package version from the release tag
+        env:
+          VERSION: ${{ github.event.release.tag_name || github.ref_name }}
+        run: |
+          set -eu
+          # v1.2.3 -> 1.2.3
+          CLEAN="${VERSION#v}"
+          if ! printf '%s' "$CLEAN" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "::error::release tag '$VERSION' is not semver (expected vX.Y.Z)"
+            exit 1
+          fi
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = process.argv[1];
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          " "$CLEAN"
+          echo "package version set to $CLEAN"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -70,6 +93,33 @@ jobs:
           fi
           echo "dist/ is free of credential-shaped strings"
 
+      # ---- npm package -------------------------------------------------------
+      - name: Build the library
+        run: bun run build:lib
+
+      - name: Assert the library entries and declarations exist
+        run: |
+          set -eu
+          for f in index.js index.cjs index.d.ts vanilla.js vanilla.cjs vanilla.d.ts \
+                   types/lib/ide.d.ts coi-serviceworker.js; do
+            test -f "dist-lib/$f" || { echo "::error::dist-lib/$f is missing"; exit 1; }
+          done
+          # A bare specifier in the vanilla build breaks consumers without a bundler.
+          if grep -nE '^import [^;]*from ?"[^.@/]|^import [^;]*from ?"@' dist-lib/vanilla.js | grep -v '@@'; then
+            echo "::error::vanilla.js contains a bare module specifier; a page without a bundler cannot resolve it"
+            exit 1
+          fi
+          # Consumers have no "@/" alias.
+          if grep -rl 'from "@/' dist-lib/ --include='*.d.ts'; then
+            echo "::error::declarations contain the project path alias '@/...'"
+            exit 1
+          fi
+          echo "library build looks correct"
+
+      - name: Library tests
+        run: bun run test:unit
+
+      # ---- artifacts ---------------------------------------------------------
       - name: Package the static site
         env:
           VERSION: ${{ github.event.release.tag_name || github.ref_name }}
@@ -87,10 +137,30 @@ jobs:
             wasm-ide-*-dist.tar.gz
             wasm-ide-*-dist.tar.gz.sha256
 
+      - name: Publish to GitHub Packages
+        if: github.event_name == 'release'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          # GITHUB_TOKEN can publish to this repo's namespace in Actions, so no
+          # long-lived PAT secret is needed in CI.
+          cat > .npmrc <<EOF
+          @fufurobot:registry=https://npm.pkg.github.com
+          //npm.pkg.github.com/:_authToken=\${NODE_AUTH_TOKEN}
+          EOF
+          npm publish
+
+      - name: Pack the library for tag-only pushes
+        if: github.event_name != 'release'
+        run: bun run build:lib && npm pack
+
       - name: Upload artifacts for tag-only pushes
         if: github.event_name != 'release'
         uses: actions/upload-artifact@v4
         with:
           name: wasm-ide-dist-${{ github.ref_name }}
-          path: wasm-ide-*-dist.tar.gz*
+          path: |
+            wasm-ide-*-dist.tar.gz*
+            fufurobot-wasm-ide-*.tgz
           retention-days: 30
