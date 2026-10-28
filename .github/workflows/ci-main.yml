@@ -51,6 +51,28 @@ jobs:
       - name: Unit tests
         run: bun run test:unit
 
+      - name: Build the npm package
+        run: bun run build:lib
+
+      - name: Assert the package entries and declarations exist
+        run: |
+          set -eu
+          for entry in index.js index.cjs index.d.ts vanilla.js vanilla.cjs vanilla.d.ts \
+                       types/lib/ide.d.ts coi-serviceworker.js; do
+            test -f "dist-lib/$entry" || { echo "::error::dist-lib/$entry is missing"; exit 1; }
+          done
+          # The vanilla entry must be usable without a bundler: no bare specifiers.
+          if grep -nE '^import[^;]*from ?"(@|[a-z])' dist-lib/vanilla.js; then
+            echo "::error::vanilla.js has a bare specifier; pages without a bundler cannot load it"
+            exit 1
+          fi
+          # Declarations must not leak the repo-only "@/..." path alias.
+          if grep -rl 'from "@/' dist-lib/ --include='*.d.ts'; then
+            echo "::error::declarations reference the project alias '@/'"
+            exit 1
+          fi
+          echo "package build looks correct"
+
       - name: Build static bundle
         run: bun run build
 

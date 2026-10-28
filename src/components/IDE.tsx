@@ -11,7 +11,7 @@
  */
 
 import Editor from "@monaco-editor/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { Terminal } from "@/components/Terminal";
@@ -29,10 +29,38 @@ import {
   type EditorLanguage,
 } from "@/lib/ide";
 
-export function IDE() {
-  const [language, setLanguage] = useState<EditorLanguage>(DEFAULT_LANGUAGE);
-  const [source, setSource] = useState<string>(() => defaultSource(DEFAULT_LANGUAGE));
-  const [stdin, setStdin] = useState("");
+export type IDEProps = {
+  /** Language for the initial buffer. */
+  initialLanguage?: EditorLanguage;
+  /** Initial source text. */
+  initialSource?: string;
+  /** Initial stdin. */
+  initialStdin?: string;
+  /** Whether to offer the permalink button. */
+  showShareButton?: boolean;
+  /** Whether to offer the download button. */
+  showDownloadButton?: boolean;
+  /** Monaco theme. */
+  theme?: "vs-dark" | "vs-light";
+  /** Notified on every edit. */
+  onSourceChange?: (source: string) => void;
+  /** Notified when a run settles. */
+  onRunComplete?: (result: { exitCode: number | null; stdout: string; stderr: string }) => void;
+};
+
+export function IDE({
+  initialLanguage = DEFAULT_LANGUAGE,
+  initialSource,
+  initialStdin = "",
+  showShareButton = true,
+  showDownloadButton = true,
+  theme = "vs-dark",
+  onSourceChange,
+  onRunComplete,
+}: IDEProps) {
+  const [language, setLanguage] = useState<EditorLanguage>(initialLanguage);
+  const [source, setSource] = useState<string>(() => initialSource ?? defaultSource(initialLanguage));
+  const [stdin, setStdin] = useState(initialStdin);
   const [copied, setCopied] = useState(false);
 
   const { state, run, stop, isBusy } = useRunner();
@@ -66,6 +94,22 @@ export function IDE() {
   const handleRun = useCallback(() => {
     void run({ language, source, stdin });
   }, [run, language, source, stdin]);
+
+  // Surface the settled result to library consumers. Keyed on the run status so
+  // it fires once per completed run rather than on every state change.
+  const lastNotified = useRef<string | null>(null);
+  useEffect(() => {
+    if (state.status !== "done" && state.status !== "error") return;
+    const key = `${state.status}:${state.durationMs}:${state.exitCode}`;
+    if (lastNotified.current === key) return;
+    lastNotified.current = key;
+
+    onRunComplete?.({
+      exitCode: state.exitCode,
+      stdout: state.output.filter(e => e.stream === "stdout").map(e => e.text).join(""),
+      stderr: state.output.filter(e => e.stream === "stderr").map(e => e.text).join(""),
+    });
+  }, [state.status, state.durationMs, state.exitCode, state.output, onRunComplete]);
 
   // Ctrl/Cmd+Enter runs, matching every other code playground.
   useEffect(() => {
@@ -131,12 +175,21 @@ export function IDE() {
 
         <div className="flex flex-wrap items-center gap-2">
           <LanguagePicker value={language} onChange={handleLanguageChange} disabled={isBusy} />
-          <Button data-testid="share-button" variant="outline" size="sm" onClick={() => void handleShare()}>
-            {copied ? "Link copied" : "Share"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleDownload}>
-            Download
-          </Button>
+          {showShareButton ? (
+            <Button
+              data-testid="share-button"
+              variant="outline"
+              size="sm"
+              onClick={() => void handleShare()}
+            >
+              {copied ? "Link copied" : "Share"}
+            </Button>
+          ) : null}
+          {showDownloadButton ? (
+            <Button variant="outline" size="sm" onClick={handleDownload}>
+              Download
+            </Button>
+          ) : null}
         </div>
       </header>
 
@@ -152,8 +205,12 @@ export function IDE() {
               height="100%"
               language={languageIdForMonaco(language)}
               value={source}
-              onChange={value => setSource(value ?? "")}
-              theme="vs-dark"
+              onChange={value => {
+                const next = value ?? "";
+                setSource(next);
+                onSourceChange?.(next);
+              }}
+              theme={theme}
               options={{
                 fontSize: 13,
                 minimap: { enabled: false },

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>wasm-ide · vanilla consumer fixture</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        background: #18181b;
+        color: #fafafa;
+      }
+      header {
+        padding: 8px 16px;
+        border-bottom: 1px solid #3f3f46;
+      }
+      #ide {
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      A plain-JS consumer: no bundler, no build step, no React on the page.
+      The only library import is the vanilla entry, served straight from the
+      built package.
+
+      This page is the fixture for tests/e2e/library.spec.ts. If it ever needs a
+      bundler or a React import to work, the vanilla entry has regressed.
+    -->
+    <header>
+      <strong>vanilla fixture</strong> — no bundler, no React
+      <span data-testid="mount-status">pending</span>
+    </header>
+
+    <div id="ide"></div>
+
+    <script type="module">
+      import { createIDE } from "/dist-lib/vanilla.js";
+
+      try {
+        // Expose the handle so the test can assert the imperative API.
+        window.ide = createIDE({ target: document.getElementById("ide") });
+        document.querySelector('[data-testid="mount-status"]').textContent = "mounted";
+      } catch (error) {
+        document.querySelector('[data-testid="mount-status"]').textContent = `error: ${error.message}`;
+        console.error(error);
+      }
+    </script>
+  </body>
+</html>
