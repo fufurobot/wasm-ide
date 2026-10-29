@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import type { OutputEntry } from "@/lib/ide";
 
 const STREAM_CLASS: Record<OutputEntry["stream"], string> = {
-  stdout: "text-foreground",
+  stdout: "text-neutral-100",
   stderr: "text-red-400",
   system: "text-muted-foreground italic",
 };
